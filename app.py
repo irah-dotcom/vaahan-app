@@ -7,16 +7,19 @@ from datetime import datetime
 st.set_page_config(page_title="Vaahan Manager", layout="wide")
 FILE = "vaahan.csv"
 
-# --- Create CSV if not exists ---
+# --- Initialize CSV ---
 if not os.path.exists(FILE):
     df = pd.DataFrame(columns=["RegNo", "Fitness", "Tax", "Permit", "Contact", "Notes"])
     df.to_csv(FILE, index=False)
 
-df = pd.read_csv(FILE)
-
-# Convert dates
-for col in ["Fitness", "Tax", "Permit"]:
-    df[col] = pd.to_datetime(df[col], errors='coerce')
+# --- Load CSV with session_state ---
+if "df" not in st.session_state:
+    df = pd.read_csv(FILE, dtype={"Contact": str})  # Contact as string to avoid type errors
+    for col in ["Fitness", "Tax", "Permit"]:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+    st.session_state.df = df
+else:
+    df = st.session_state.df
 
 today = pd.to_datetime(datetime.today().date())
 
@@ -24,18 +27,18 @@ today = pd.to_datetime(datetime.today().date())
 st.sidebar.title("🚗 Vaahan Manager")
 menu = st.sidebar.selectbox("Menu", ["Home", "Vaahan"])
 
-# --- Home Page ---
+# --- Home ---
 if menu == "Home":
     st.image("logo.png", width=200)
     st.subheader("Select Service")
     st.info("👉 Use the sidebar to go to Vaahan section")
 
-# --- Vaahan Page ---
+# --- Vaahan Dashboard ---
 elif menu == "Vaahan":
     st.header("🚗 Vaahan Dashboard")
     
     st.subheader("All Vehicles")
-    st.dataframe(df, use_container_width=True)  # Table view for all vehicles
+    st.dataframe(df.reset_index(drop=True), use_container_width=True)
 
     st.divider()
     
@@ -44,14 +47,14 @@ elif menu == "Vaahan":
     # --- Add Data ---
     if option == "Add Data":
         st.subheader("➕ Add Vehicle Data")
-        reg = st.text_input("Registration Number")
-        fitness = st.date_input("Fitness Validity")
-        tax = st.date_input("Tax Validity")
-        permit = st.date_input("Permit Validity")
-        contact = st.text_input("Contact Number")
-        notes = st.text_area("Notes")
+        reg = st.text_input("Registration Number", key="add_reg")
+        fitness = st.date_input("Fitness Validity", key="add_fit")
+        tax = st.date_input("Tax Validity", key="add_tax")
+        permit = st.date_input("Permit Validity", key="add_permit")
+        contact = st.text_input("Contact Number", key="add_contact", max_chars=10)
+        notes = st.text_area("Notes", key="add_notes")
 
-        if st.button("Save"):
+        if st.button("Save", key="add_save"):
             if not reg:
                 st.warning("⚠️ Enter Registration Number")
             elif reg in df["RegNo"].values:
@@ -60,62 +63,61 @@ elif menu == "Vaahan":
                 st.error("❌ Contact must be a number with max 10 digits")
             else:
                 new = pd.DataFrame([[reg, fitness, tax, permit, contact, notes]], columns=df.columns)
-                new.to_csv(FILE, mode='a', header=False, index=False)
+                df = pd.concat([df, new], ignore_index=True)
+                df.to_csv(FILE, index=False)
+                st.session_state.df = df
                 st.success("✅ Data Saved!")
-                st.experimental_rerun()  # Refresh table automatically
+                st.experimental_rerun()
 
     # --- View / Search ---
     elif option == "View / Search":
         st.subheader("🔍 Search & Manage Vehicles")
 
-        # --- Refresh Button ---
-        if st.button("🔄 Refresh Table"):
-            st.experimental_rerun()  # Safe refresh
+        search_reg = st.text_input("Search by Registration Number", key="search_reg")
+        search_contact = st.text_input("Search by Contact Number", key="search_contact")
+        month_filter = st.selectbox("Filter by Month (Fitness)", ["All"] + [datetime(2000, m, 1).strftime("%B") for m in range(1, 13)], key="search_month")
 
-        search_reg = st.text_input("Search by Registration Number")
-        search_contact = st.text_input("Search by Contact Number")
-        month_filter = st.selectbox("Filter by Month", ["All"] + [datetime(2000, m, 1).strftime('%B') for m in range(1, 13)])
+        temp_df = df.copy().reset_index(drop=False)  # Keep original indices for safe update/delete
 
-        temp_df = df.copy()
-
-        # Filter by RegNo
+        # Apply filters
         if search_reg:
-            temp_df = temp_df[temp_df["RegNo"].str.contains(search_reg, case=False)]
-
-        # Filter by Contact
+            temp_df = temp_df[temp_df["RegNo"].str.contains(search_reg, case=False, na=False)]
         if search_contact:
-            temp_df = temp_df[temp_df["Contact"].astype(str).str.contains(search_contact)]
-
-        # Filter by month (Fitness)
+            temp_df = temp_df[temp_df["Contact"].str.contains(search_contact, na=False)]
         if month_filter != "All":
             month_number = datetime.strptime(month_filter, "%B").month
             temp_df = temp_df[temp_df["Fitness"].dt.month == month_number]
 
-        st.dataframe(temp_df, use_container_width=True)
+        st.dataframe(temp_df.drop(columns="index").reset_index(drop=True), use_container_width=True)
 
         st.divider()
 
-        for i, row in temp_df.iterrows():
+        for idx, row in temp_df.iterrows():
+            original_index = row["index"]  # Original df index
             with st.expander(f"🚗 {row['RegNo']} | Contact: {row['Contact']}"):
-                new_fitness = st.date_input("Edit Fitness", row["Fitness"], key=f"f{i}")
-                new_tax = st.date_input("Edit Tax", row["Tax"], key=f"t{i}")
-                new_permit = st.date_input("Edit Permit", row["Permit"], key=f"p{i}")
-                new_contact = st.text_input("Edit Contact", str(row["Contact"]), key=f"c{i}", max_chars=10)
-                new_notes = st.text_area("Edit Notes", row["Notes"], key=f"n{i}")
+                new_fitness = st.date_input("Edit Fitness", row["Fitness"], key=f"f{original_index}")
+                new_tax = st.date_input("Edit Tax", row["Tax"], key=f"t{original_index}")
+                new_permit = st.date_input("Edit Permit", row["Permit"], key=f"p{original_index}")
+                new_contact = st.text_input("Edit Contact", str(row["Contact"]), max_chars=10, key=f"c{original_index}")
+                new_notes = st.text_area("Edit Notes", row["Notes"], key=f"n{original_index}")
 
                 # Update button
-                if st.button("Update", key=f"u{i}"):
+                if st.button("Update", key=f"u{original_index}"):
                     if not new_contact.isdigit() or len(new_contact) > 10:
                         st.error("❌ Contact must be a number with max 10 digits")
                     else:
-                        df.loc[i, ["Fitness","Tax","Permit","Contact","Notes"]] = [
-                            new_fitness, new_tax, new_permit, int(new_contact), new_notes
+                        df.loc[original_index, ["Fitness","Tax","Permit","Contact","Notes"]] = [
+                            new_fitness, new_tax, new_permit, new_contact, new_notes
                         ]
                         df.to_csv(FILE, index=False)
-                        st.success("✅ Updated! Click Refresh to see changes.")
+                        st.session_state.df = df
+                        st.success("✅ Updated!")
+                        st.experimental_rerun()  # Auto refresh safely
 
                 # Delete button
-                if st.button("Delete", key=f"d{i}"):
-                    df = df.drop(i)
+                if st.button("Delete", key=f"d{original_index}"):
+                    df = df.drop(original_index).reset_index(drop=True)
                     df.to_csv(FILE, index=False)
-                    st.warning("⚠️ Deleted! Click Refresh to see changes.")
+                    st.session_state.df = df
+                    st.warning("⚠️ Deleted!")
+                    st.experimental_rerun()

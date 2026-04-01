@@ -14,7 +14,7 @@ if not os.path.exists(FILE):
 
 # --- Load CSV with session_state ---
 if "df" not in st.session_state:
-    df = pd.read_csv(FILE, dtype={"Contact": str})  # Contact as string to avoid type errors
+    df = pd.read_csv(FILE, dtype={"Contact": str})  # Contact as string
     for col in ["Fitness", "Tax", "Permit"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
     st.session_state.df = df
@@ -36,12 +36,12 @@ if menu == "Home":
 # --- Vaahan Dashboard ---
 elif menu == "Vaahan":
     st.header("🚗 Vaahan Dashboard")
-    
+
     st.subheader("All Vehicles")
     st.dataframe(df.reset_index(drop=True), use_container_width=True)
 
     st.divider()
-    
+
     option = st.selectbox("Choose Option", ["Add Data", "View / Search"])
 
     # --- Add Data ---
@@ -62,22 +62,27 @@ elif menu == "Vaahan":
             elif not contact.isdigit() or len(contact) > 10:
                 st.error("❌ Contact must be a number with max 10 digits")
             else:
-                new = pd.DataFrame([[reg, fitness, tax, permit, contact, notes]], columns=df.columns)
+                new = pd.DataFrame([[reg, pd.Timestamp(fitness), pd.Timestamp(tax), pd.Timestamp(permit), contact, notes]],
+                                   columns=df.columns)
                 df = pd.concat([df, new], ignore_index=True)
                 df.to_csv(FILE, index=False)
                 st.session_state.df = df
                 st.success("✅ Data Saved!")
-                st.experimental_rerun()
 
     # --- View / Search ---
     elif option == "View / Search":
         st.subheader("🔍 Search & Manage Vehicles")
 
+        if st.button("🔄 Refresh Table"):
+            st.experimental_rerun()
+
         search_reg = st.text_input("Search by Registration Number", key="search_reg")
         search_contact = st.text_input("Search by Contact Number", key="search_contact")
-        month_filter = st.selectbox("Filter by Month (Fitness)", ["All"] + [datetime(2000, m, 1).strftime("%B") for m in range(1, 13)], key="search_month")
+        month_filter = st.selectbox("Filter by Month (Fitness)", ["All"] +
+                                    [datetime(2000, m, 1).strftime("%B") for m in range(1, 13)],
+                                    key="search_month")
 
-        temp_df = df.copy().reset_index(drop=False)  # Keep original indices for safe update/delete
+        temp_df = df.copy().reset_index(drop=False)
 
         # Apply filters
         if search_reg:
@@ -89,11 +94,10 @@ elif menu == "Vaahan":
             temp_df = temp_df[temp_df["Fitness"].dt.month == month_number]
 
         st.dataframe(temp_df.drop(columns="index").reset_index(drop=True), use_container_width=True)
-
         st.divider()
 
         for idx, row in temp_df.iterrows():
-            original_index = row["index"]  # Original df index
+            original_index = row["index"]
             with st.expander(f"🚗 {row['RegNo']} | Contact: {row['Contact']}"):
                 new_fitness = st.date_input("Edit Fitness", row["Fitness"], key=f"f{original_index}")
                 new_tax = st.date_input("Edit Tax", row["Tax"], key=f"t{original_index}")
@@ -103,21 +107,24 @@ elif menu == "Vaahan":
 
                 # Update button
                 if st.button("Update", key=f"u{original_index}"):
-                    if not new_contact.isdigit() or len(new_contact) > 10:
-                        st.error("❌ Contact must be a number with max 10 digits")
-                    else:
-                        df.loc[original_index, ["Fitness","Tax","Permit","Contact","Notes"]] = [
-                            new_fitness, new_tax, new_permit, new_contact, new_notes
-                        ]
-                        df.to_csv(FILE, index=False)
-                        st.session_state.df = df
-                        st.success("✅ Updated!")
-                        st.experimental_rerun()  # Auto refresh safely
+                    try:
+                        if not new_contact.isdigit() or len(new_contact) > 10:
+                            st.error("❌ Contact must be a number with max 10 digits")
+                        else:
+                            df.at[original_index, "Fitness"] = pd.Timestamp(new_fitness)
+                            df.at[original_index, "Tax"] = pd.Timestamp(new_tax)
+                            df.at[original_index, "Permit"] = pd.Timestamp(new_permit)
+                            df.at[original_index, "Contact"] = new_contact
+                            df.at[original_index, "Notes"] = new_notes
+                            df.to_csv(FILE, index=False)
+                            st.session_state.df = df
+                            st.success("✅ Updated! Click Refresh to see changes.")
+                    except Exception as e:
+                        st.error(f"❌ Error updating: {e}")
 
                 # Delete button
                 if st.button("Delete", key=f"d{original_index}"):
                     df = df.drop(original_index).reset_index(drop=True)
                     df.to_csv(FILE, index=False)
                     st.session_state.df = df
-                    st.warning("⚠️ Deleted!")
-                    st.experimental_rerun()
+                    st.warning("⚠️ Deleted! Click Refresh to see changes.")

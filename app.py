@@ -55,7 +55,7 @@ elif menu == "Vaahan":
         fitness = st.date_input("Fitness Validity")
         tax = st.date_input("Tax Validity")
         permit = st.date_input("Permit Validity")
-        contact = st.text_input("Contact Number")
+        contact = st.text_int(input("Contact Number"))
         notes = st.text_area("Notes")
 
         if st.button("Save"):

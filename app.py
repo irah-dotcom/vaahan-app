@@ -74,20 +74,30 @@ elif menu == "Vaahan":
         st.subheader("🔍 Search & Manage")
 
         search = st.text_input("Search by Reg No")
-        filter_option = st.selectbox("Filter", ["All", "Expired Only"])
 
-        temp_df = df.copy()
+mobile_search = st.text_input("Search by Mobile Number")
 
-        if search:
-            temp_df = temp_df[temp_df["RegNo"].str.contains(search, case=False)]
+month_filter = st.selectbox(
+    "Filter by Month (Fitness Date)",
+    ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+)
 
-        if filter_option == "Expired Only":
-            temp_df = temp_df[
-                (temp_df["Fitness"] < today) |
-                (temp_df["Tax"] < today) |
-                (temp_df["Permit"] < today)
-            ]
+temp_df = df.copy()
 
+if search:
+    temp_df = temp_df[temp_df["RegNo"].str.contains(search, case=False)]
+
+if mobile_search:
+    temp_df = temp_df[temp_df["Contact"].astype(str).str.contains(mobile_search)]
+
+month_map = {
+    "Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,
+    "Jul":7,"Aug":8,"Sep":9,"Oct":10,"Nov":11,"Dec":12
+}
+
+if month_filter != "All":
+    temp_df = temp_df[temp_df["Fitness"].dt.month == month_map[month_filter]]
         for i, row in temp_df.iterrows():
             status = "❌ EXPIRED" if (
                 row["Fitness"] < today or

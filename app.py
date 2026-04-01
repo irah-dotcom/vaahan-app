@@ -62,11 +62,15 @@ elif menu == "Vaahan":
                 new = pd.DataFrame([[reg, fitness, tax, permit, contact, notes]], columns=df.columns)
                 new.to_csv(FILE, mode='a', header=False, index=False)
                 st.success("✅ Data Saved!")
-                st.experimental_rerun()  # Auto refresh
+                st.experimental_rerun()  # Refresh table automatically
 
     # --- View / Search ---
     elif option == "View / Search":
         st.subheader("🔍 Search & Manage Vehicles")
+
+        # --- Refresh Button ---
+        if st.button("🔄 Refresh Table"):
+            st.experimental_rerun()  # Safe refresh
 
         search_reg = st.text_input("Search by Registration Number")
         search_contact = st.text_input("Search by Contact Number")
@@ -96,7 +100,7 @@ elif menu == "Vaahan":
                 new_fitness = st.date_input("Edit Fitness", row["Fitness"], key=f"f{i}")
                 new_tax = st.date_input("Edit Tax", row["Tax"], key=f"t{i}")
                 new_permit = st.date_input("Edit Permit", row["Permit"], key=f"p{i}")
-                new_contact = st.text_input("Edit Contact", row["Contact"], key=f"c{i}", max_chars=10)
+                new_contact = st.text_input("Edit Contact", str(row["Contact"]), key=f"c{i}", max_chars=10)
                 new_notes = st.text_area("Edit Notes", row["Notes"], key=f"n{i}")
 
                 # Update button
@@ -105,15 +109,13 @@ elif menu == "Vaahan":
                         st.error("❌ Contact must be a number with max 10 digits")
                     else:
                         df.loc[i, ["Fitness","Tax","Permit","Contact","Notes"]] = [
-                            new_fitness, new_tax, new_permit, new_contact, new_notes
+                            new_fitness, new_tax, new_permit, int(new_contact), new_notes
                         ]
                         df.to_csv(FILE, index=False)
-                        st.success("✅ Updated!")
-                        st.experimental_rerun()  # Auto refresh
+                        st.success("✅ Updated! Click Refresh to see changes.")
 
                 # Delete button
                 if st.button("Delete", key=f"d{i}"):
                     df = df.drop(i)
                     df.to_csv(FILE, index=False)
-                    st.warning("⚠️ Deleted!")
-                    st.experimental_rerun()  # Auto refresh
+                    st.warning("⚠️ Deleted! Click Refresh to see changes.")

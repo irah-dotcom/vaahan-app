@@ -98,7 +98,7 @@ month_map = {
 
 if month_filter != "All":
     temp_df = temp_df[temp_df["Fitness"].dt.month == month_map[month_filter]]
-            with st.expander(f"{status} 🚗 {row['RegNo']}"):
+with st.expander(f"{status} 🚗 {row['RegNo']}"):
 
                 st.write(f"Fitness: {row['Fitness'].date()}")
                 st.write(f"Tax: {row['Tax'].date()}")

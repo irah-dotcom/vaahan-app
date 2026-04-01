@@ -98,13 +98,6 @@ month_map = {
 
 if month_filter != "All":
     temp_df = temp_df[temp_df["Fitness"].dt.month == month_map[month_filter]]
-for i, row in temp_df.iterrows():
-            status = "❌ EXPIRED" if (
-                row["Fitness"] < today or
-                row["Tax"] < today or
-                row["Permit"] < today
-            ) else "✅ OK"
-
             with st.expander(f"{status} 🚗 {row['RegNo']}"):
 
                 st.write(f"Fitness: {row['Fitness'].date()}")

@@ -14,9 +14,11 @@ if not os.path.exists(FILE):
 
 # --- Load CSV with session_state ---
 if "df" not in st.session_state:
-    df = pd.read_csv(FILE, dtype={"Contact": str})  # Contact as string
+    df = pd.read_csv(FILE, dtype={"Contact": str})
     for col in ["Fitness", "Tax", "Permit"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
+    df["Contact"] = df["Contact"].fillna("")  # ensure contact not NaN
+    df["Notes"] = df["Notes"].fillna("")
     st.session_state.df = df
 else:
     df = st.session_state.df
@@ -38,8 +40,7 @@ elif menu == "Vaahan":
     st.header("🚗 Vaahan Dashboard")
 
     st.subheader("All Vehicles")
-    st.dataframe(df.reset_index(drop=True), use_container_width=True)
-
+    st.dataframe(st.session_state.df.reset_index(drop=True), use_container_width=True)
     st.divider()
 
     option = st.selectbox("Choose Option", ["Add Data", "View / Search"])
@@ -57,32 +58,36 @@ elif menu == "Vaahan":
         if st.button("Save", key="add_save"):
             if not reg:
                 st.warning("⚠️ Enter Registration Number")
-            elif reg in df["RegNo"].values:
+            elif reg in st.session_state.df["RegNo"].values:
                 st.error("❌ Registration Number already exists!")
             elif not contact.isdigit() or len(contact) > 10:
                 st.error("❌ Contact must be a number with max 10 digits")
             else:
-                new = pd.DataFrame([[reg, pd.Timestamp(fitness), pd.Timestamp(tax), pd.Timestamp(permit), contact, notes]],
-                                   columns=df.columns)
-                df = pd.concat([df, new], ignore_index=True)
-                df.to_csv(FILE, index=False)
-                st.session_state.df = df
-                st.success("✅ Data Saved!")
+                new_row = {
+                    "RegNo": reg,
+                    "Fitness": pd.Timestamp(fitness),
+                    "Tax": pd.Timestamp(tax),
+                    "Permit": pd.Timestamp(permit),
+                    "Contact": contact,
+                    "Notes": notes
+                }
+                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_row])], ignore_index=True)
+                st.session_state.df.to_csv(FILE, index=False)
+                st.success("✅ Vehicle Added Successfully!")
 
     # --- View / Search ---
     elif option == "View / Search":
         st.subheader("🔍 Search & Manage Vehicles")
 
-        if st.button("🔄 Refresh Table"):
-            st.experimental_rerun()
-
         search_reg = st.text_input("Search by Registration Number", key="search_reg")
         search_contact = st.text_input("Search by Contact Number", key="search_contact")
-        month_filter = st.selectbox("Filter by Month (Fitness)", ["All"] +
-                                    [datetime(2000, m, 1).strftime("%B") for m in range(1, 13)],
-                                    key="search_month")
+        month_filter = st.selectbox(
+            "Filter by Month (Fitness)",
+            ["All"] + [datetime(2000, m, 1).strftime("%B") for m in range(1, 13)],
+            key="search_month"
+        )
 
-        temp_df = df.copy().reset_index(drop=False)
+        temp_df = st.session_state.df.copy().reset_index(drop=False)
 
         # Apply filters
         if search_reg:
@@ -96,7 +101,8 @@ elif menu == "Vaahan":
         st.dataframe(temp_df.drop(columns="index").reset_index(drop=True), use_container_width=True)
         st.divider()
 
-        for idx, row in temp_df.iterrows():
+        # --- Edit/Delete Section ---
+        for _, row in temp_df.iterrows():
             original_index = row["index"]
             with st.expander(f"🚗 {row['RegNo']} | Contact: {row['Contact']}"):
                 new_fitness = st.date_input("Edit Fitness", row["Fitness"], key=f"f{original_index}")
@@ -105,26 +111,24 @@ elif menu == "Vaahan":
                 new_contact = st.text_input("Edit Contact", str(row["Contact"]), max_chars=10, key=f"c{original_index}")
                 new_notes = st.text_area("Edit Notes", row["Notes"], key=f"n{original_index}")
 
-                # Update button
+                # Update
                 if st.button("Update", key=f"u{original_index}"):
                     try:
                         if not new_contact.isdigit() or len(new_contact) > 10:
                             st.error("❌ Contact must be a number with max 10 digits")
                         else:
-                            df.at[original_index, "Fitness"] = pd.Timestamp(new_fitness)
-                            df.at[original_index, "Tax"] = pd.Timestamp(new_tax)
-                            df.at[original_index, "Permit"] = pd.Timestamp(new_permit)
-                            df.at[original_index, "Contact"] = new_contact
-                            df.at[original_index, "Notes"] = new_notes
-                            df.to_csv(FILE, index=False)
-                            st.session_state.df = df
-                            st.success("✅ Updated! Click Refresh to see changes.")
+                            st.session_state.df.at[original_index, "Fitness"] = pd.Timestamp(new_fitness)
+                            st.session_state.df.at[original_index, "Tax"] = pd.Timestamp(new_tax)
+                            st.session_state.df.at[original_index, "Permit"] = pd.Timestamp(new_permit)
+                            st.session_state.df.at[original_index, "Contact"] = new_contact
+                            st.session_state.df.at[original_index, "Notes"] = new_notes
+                            st.session_state.df.to_csv(FILE, index=False)
+                            st.success("✅ Vehicle Updated Successfully!")
                     except Exception as e:
                         st.error(f"❌ Error updating: {e}")
 
-                # Delete button
+                # Delete
                 if st.button("Delete", key=f"d{original_index}"):
-                    df = df.drop(original_index).reset_index(drop=True)
-                    df.to_csv(FILE, index=False)
-                    st.session_state.df = df
-                    st.warning("⚠️ Deleted! Click Refresh to see changes.")
+                    st.session_state.df = st.session_state.df.drop(original_index).reset_index(drop=True)
+                    st.session_state.df.to_csv(FILE, index=False)
+                    st.warning("⚠️ Vehicle Deleted Successfully!")
